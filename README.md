@@ -1,96 +1,72 @@
-# LLM Arena Compare
+<div align="center">
+  <img src="public/favicon.svg" width="64" height="64" alt="LLM Arena Compare" />
+  <h1>LLM Arena Compare</h1>
+  <p><strong>赛博斗蛐蛐 — 自选模型横向 PK，一眼看出谁强谁弱</strong></p>
 
-[中文文档](docs/README.zh-CN.md)
+  [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+  [![Node](https://img.shields.io/badge/node-%3E%3D20.9-brightgreen.svg)](package.json)
+  [![CI](https://github.com/tianyu0413/llm-arena-compare/actions/workflows/ci.yml/badge.svg)](https://github.com/tianyu0413/llm-arena-compare/actions/workflows/ci.yml)
 
-## Live Demo
+  <h3><a href="https://llm-arena-compare.vercel.app">👉 立即在线体验 — 无需安装，打开即用</a></h3>
 
-[https://llm-arena-compare.vercel.app](https://llm-arena-compare.vercel.app)
+  [中文文档](docs/README.zh-CN.md)
+</div>
 
-LLM Arena Compare is a local-first dashboard for comparing selected models from the public Arena Text and Code leaderboards. It helps you search models, save favorite model sets in the browser, refresh live leaderboard scores, and compare rank, score, votes, price, and context window in a focused visual interface.
+---
 
-![LLM Arena Compare preview](public/preview.png)
+<p align="center">
+  <img src="public/preview.png" alt="LLM Arena Compare preview" width="900" style="border-radius:8px;" />
+</p>
 
-## Highlights
+## 🤔 为什么需要这个工具？
 
-- Syncs the public Arena Text leaderboard from `https://arena.ai/leaderboard/text`.
-- Syncs the public Arena Code WebDev leaderboard from `https://arena.ai/leaderboard/code/webdev`.
-- Lets users search and select up to 10 models for side-by-side comparison.
-- Saves favorites, current selection, selected leaderboard, and UI language in `localStorage`.
-- Defaults to Chinese UI and includes an in-app `中文 / English` language switcher.
-- Shows leaderboard-specific horizontal score charts, summary cards, rank/vote charts, and a comparison table.
-- Uses a 5-minute in-memory server cache to reduce repeated requests to Arena.
+### Arena 是什么？
 
-## Tech Stack
+[LMSYS Chatbot Arena](https://arena.ai) 是目前最权威的大模型评测榜单之一。它基于**真人盲评投票**（ELO 排名机制），而非传统 benchmark 刷分，真实反映模型在日常对话中的实际表现。GPT、Claude、Gemini、Llama 等主流模型都在这个擂台上 PK，累计投票数超百万。
 
-- Next.js 16
-- React 19
-- TypeScript
-- Tailwind CSS
-- Recharts
-- Cheerio
-- lucide-react
+### 痛点在哪？
 
-## Quick Start
+Arena 官网只提供一张完整排行榜，**无法自选 3~10 个模型进行横向对比**。当你想回答"Claude vs GPT vs Gemini 到底谁强？"这类问题时，只能在几百行的表格里反复翻找、手动记录——体验极差。
 
-Requirements:
+### 这个工具做了什么？
 
-- Node.js `>=20.9.0`
-- npm
+**LLM Arena Compare** 让你像"斗蛐蛐"一样：挑出你关心的模型，摆在一起，从分数、排名、票数、价格到上下文窗口，一张图一目了然。选完还能分享链接给别人，打开即复现对比结果。
 
-1. Clone the repository and enter the project directory:
+## ✨ Features
+
+- **🏆 双榜对比** — Arena Text + Code WebDev 榜单实时同步
+- **🔍 智能搜索** — 按模型名称/组织/协议快速筛选，键盘 `/` 聚焦
+- **⭐ 常用组合** — 收藏模型组合，下次打开即用
+- **📊 可视化图表** — 分数横向柱状图、排名/票数对比图
+- **🌙 深色模式** — 自动跟随系统 or 手动切换
+- **🔗 URL 分享** — 选好模型后一键分享链接，对方打开即恢复对比
+- **📥 数据导出** — 导出 CSV / 复制 Markdown 表格
+- **⌨️ 键盘快捷键** — `/` 搜索、`Esc` 清除
+- **📱 移动友好** — 响应式侧边栏，移动端流畅使用
+
+## 🛠 Tech Stack
+
+Next.js 16 · React 19 · TypeScript · Tailwind CSS · Recharts · Cheerio · lucide-react
+
+## 🚀 本地开发
 
 ```bash
 git clone https://github.com/tianyu0413/llm-arena-compare.git
 cd llm-arena-compare
-```
-
-2. Install dependencies:
-
-```bash
 npm install
-```
-
-3. Run the project checks:
-
-```bash
-npm run check
-```
-
-4. Start the development server:
-
-```bash
 npm run dev
 ```
 
-5. Open the app:
+Open [http://localhost:3000](http://localhost:3000)
 
-```text
-http://localhost:3000
-```
-
-6. Build and run production locally:
-
-```bash
-npm run build
-npm run start
-```
-
-If you already have the source code locally, start from the project directory:
-
-```bash
-cd /path/to/llm-arena-compare
-```
-
-## API
-
-The app exposes two local API routes:
+## 📡 API
 
 ```text
 GET /api/arena/text
 GET /api/arena/code
 ```
 
-Response shape:
+Response:
 
 ```ts
 {
@@ -101,27 +77,25 @@ Response shape:
 }
 ```
 
-This is not an official Arena API. It parses the public leaderboard HTML and may need maintenance if Arena changes its page structure.
+> Not an official Arena API. Parses public leaderboard HTML; may need maintenance if Arena changes its page structure.
 
-## Data Source and Limitations
+## ⚠️ Limitations
 
-- The app currently covers the Arena Text leaderboard and the Arena Code WebDev leaderboard.
-- Data is fetched from the public leaderboard page, not from a private or official API.
-- The server cache is in memory, so each deployment instance keeps its own short-lived 5-minute cache.
-- If Arena changes its public HTML structure, the parser may need to be updated.
-- Adjust `CACHE_TTL_MS` in `lib/arena.ts` if you need a different refresh cadence.
+- Server cache is in-memory (5 min TTL per instance)
+- Covers Arena Text and Code WebDev leaderboards only
+- HTML parser may break if Arena restructures its public page
 
-## Roadmap
+## 🗺 Roadmap
 
-- Additional Arena categories beyond the current Text and Code WebDev leaderboards.
-- Export selected comparison data as CSV.
-- More chart modes for price, context, and vote confidence.
-- Historical snapshots if a persistent database is introduced.
+- [ ] More Arena categories (Vision, Hard Prompts, etc.)
+- [ ] Historical score snapshots
+- [ ] Export comparison as image
+- [ ] Customizable chart color palette
 
-## Contributing
+## 🤝 Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## License
+## 📄 License
 
-MIT
+[MIT](LICENSE)

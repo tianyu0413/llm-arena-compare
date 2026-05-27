@@ -4,11 +4,35 @@
 
 :root {
   color-scheme: light;
+  --color-ink: #17212b;
+  --color-mist: #edf2f4;
+  --color-sea: #2d7f87;
+  --color-surface: #f6f7f1;
+  --color-panel: #ffffff;
+  --shadow-color: rgba(23, 33, 43, 0.10);
+  --chart-grid: #dbe3e6;
+  --chart-score: #2d7f87;
+  --chart-rank: #d89a2b;
+  --chart-votes: #c85850;
+}
+
+html.dark {
+  color-scheme: dark;
+  --color-ink: #e4e8ec;
+  --color-mist: #1e2a36;
+  --color-sea: #3fb5bf;
+  --color-surface: #0f171e;
+  --color-panel: #182430;
+  --shadow-color: rgba(0, 0, 0, 0.35);
+  --chart-grid: #2a3a48;
+  --chart-score: #3fb5bf;
+  --chart-rank: #e8b44a;
+  --chart-votes: #e07068;
 }
 
 body {
-  background: #f7f8f4;
-  color: #17212b;
+  background: var(--color-surface);
+  color: var(--color-ink);
 }
 
 button,

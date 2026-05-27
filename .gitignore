@@ -32,5 +32,11 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Next.js auto-generated
+next-env.d.ts
+
+# AI assistant local config
+.claude/
+
 # local generated screenshots
 arena-model-compare-*.png

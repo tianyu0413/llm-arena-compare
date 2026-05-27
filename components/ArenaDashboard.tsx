@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -16,19 +16,26 @@ import {
   BarChart3,
   Check,
   DollarSign,
+  Download,
   ExternalLink,
   Hash,
   Languages,
+  Link2,
+  Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
   RefreshCw,
   RotateCcw,
   Save,
   Search,
   Star,
+  Sun,
   Trash2,
   Trophy,
   Users,
   X
 } from "lucide-react";
+import { showToast, ToastContainer } from "@/components/Toast";
 import type { ArenaLeaderboardKind, ArenaLeaderboardResponse, ArenaModel } from "@/lib/arena";
 
 type ApiState =
@@ -37,12 +44,14 @@ type ApiState =
   | { status: "error"; data: ArenaLeaderboardResponse | null; error: string };
 
 type Language = "zh" | "en";
+type Theme = "light" | "dark" | "system";
 
 const preferredDefaults = ["claude", "gpt", "gemini"];
 const maxSelected = 10;
 const storagePrefix = "llm-arena-compare";
 const leaderboardKey = `${storagePrefix}:leaderboard`;
 const languageKey = "llm-arena-compare:language";
+const themeKey = "llm-arena-compare:theme";
 const sharedFavoritesKey = `${storagePrefix}:favorites`;
 const previousSavedSelectionKey = "llm-arena-compare:selected";
 const legacySavedSelectionKey = "arena-model-compare:selected";
@@ -118,7 +127,18 @@ const translations = {
     scoreLegendText: "Arena 文本分数",
     scoreLegendCode: "Arena Code 分数",
     rankLegend: "排名",
-    votesLegend: "票数"
+    votesLegend: "票数",
+    shareLink: "分享链接",
+    linkCopied: "链接已复制到剪贴板",
+    exportCsv: "导出 CSV",
+    csvExported: "CSV 已导出",
+    copyMarkdown: "复制 Markdown",
+    markdownCopied: "Markdown 已复制到剪贴板",
+    favoritesSaved: "已保存为常用模型",
+    favoritesCleared: "常用模型已清空",
+    favoritesApplied: "已应用常用模型",
+    theme: "主题",
+    modelPanel: "模型面板"
   },
   en: {
     appKickerText: "Arena Text Leaderboard",
@@ -184,7 +204,18 @@ const translations = {
     scoreLegendText: "Arena Text Score",
     scoreLegendCode: "Arena Code Score",
     rankLegend: "Rank",
-    votesLegend: "Votes"
+    votesLegend: "Votes",
+    shareLink: "Share Link",
+    linkCopied: "Link copied to clipboard",
+    exportCsv: "Export CSV",
+    csvExported: "CSV exported",
+    copyMarkdown: "Copy Markdown",
+    markdownCopied: "Markdown copied to clipboard",
+    favoritesSaved: "Saved as favorites",
+    favoritesCleared: "Favorites cleared",
+    favoritesApplied: "Favorites applied",
+    theme: "Theme",
+    modelPanel: "Model Panel"
   }
 } satisfies Record<Language, Record<string, string>>;
 
@@ -253,6 +284,82 @@ function readStoredLeaderboard(): ArenaLeaderboardKind {
   }
 }
 
+function readStoredTheme(): Theme {
+  try {
+    const val = window.localStorage.getItem(themeKey);
+    if (val === "dark" || val === "light") return val;
+    return "light";
+  } catch {
+    return "light";
+  }
+}
+
+function applyThemeClass(theme: Theme) {
+  const isDark =
+    theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  document.documentElement.classList.toggle("dark", isDark);
+}
+
+function readUrlParams(): { board?: ArenaLeaderboardKind; models?: string[] } | null {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const board = params.get("board");
+    const models = params.get("models");
+    if (!board && !models) return null;
+    return {
+      board: board === "code" ? "code" : board === "text" ? "text" : undefined,
+      models: models ? models.split(",").filter(Boolean) : undefined
+    };
+  } catch {
+    return null;
+  }
+}
+
+function buildShareUrl(leaderboard: ArenaLeaderboardKind, selectedIds: string[]) {
+  const url = new URL(window.location.href.split("?")[0]);
+  url.searchParams.set("board", leaderboard);
+  if (selectedIds.length > 0) {
+    url.searchParams.set("models", selectedIds.join(","));
+  }
+  return url.toString();
+}
+
+function exportCsv(models: ArenaModel[]) {
+  const header = "Model,Organization,License,Rank,Score,CI,Votes,Input Price,Output Price,Context";
+  const rows = models.map((m) =>
+    [
+      `"${m.name}"`,
+      `"${m.organization}"`,
+      `"${m.license}"`,
+      m.rank ?? "",
+      m.score ?? "",
+      m.ci ?? "",
+      m.votes ?? "",
+      m.priceInput ?? "",
+      m.priceOutput ?? "",
+      m.context ?? ""
+    ].join(",")
+  );
+  const csv = [header, ...rows].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "arena-compare.csv";
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function buildMarkdownTable(models: ArenaModel[]) {
+  const header = "| Model | Rank | Score | Votes | Input Price | Output Price | Context |";
+  const separator = "| --- | ---: | ---: | ---: | ---: | ---: | --- |";
+  const rows = models.map(
+    (m) =>
+      `| ${m.name} | ${m.rank ?? "—"} | ${m.score ?? "—"} ${m.ci ?? ""} | ${m.votes ?? "—"} | ${m.priceInput ?? "—"} | ${m.priceOutput ?? "—"} | ${m.context ?? "—"} |`
+  );
+  return [header, separator, ...rows].join("\n");
+}
+
 function buildDefaultSelection(models: ArenaModel[]) {
   const selected = preferredDefaults
     .map((keyword) => models.find((model) => normalize(model.name).includes(keyword)))
@@ -303,6 +410,10 @@ export function ArenaDashboard() {
   const [language, setLanguage] = useState<Language>("zh");
   const [leaderboard, setLeaderboard] = useState<ArenaLeaderboardKind>("text");
   const [activeStorageKind, setActiveStorageKind] = useState<ArenaLeaderboardKind | null>(null);
+  const [theme, setTheme] = useState<Theme>("system");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const urlParamsApplied = useRef(false);
 
   const t = translations[language];
   const sourceUrl = apiState.data?.sourceUrl ?? fallbackSourceUrls[leaderboard];
@@ -338,7 +449,20 @@ export function ArenaDashboard() {
 
   useEffect(() => {
     setLanguage(readStoredLanguage());
-    setLeaderboard(readStoredLeaderboard());
+    const storedTheme = readStoredTheme();
+    setTheme(storedTheme);
+    applyThemeClass(storedTheme);
+    const urlParams = readUrlParams();
+    if (urlParams?.board) {
+      setLeaderboard(urlParams.board);
+      if (urlParams.models && urlParams.models.length > 0) {
+        setSelectedIds(urlParams.models.slice(0, maxSelected));
+        setHasUserSelection(true);
+        urlParamsApplied.current = true;
+      }
+    } else {
+      setLeaderboard(readStoredLeaderboard());
+    }
     setStorageReady(true);
   }, []);
 
@@ -352,14 +476,23 @@ export function ArenaDashboard() {
   }, [language, storageReady]);
 
   useEffect(() => {
+    if (!storageReady) return;
+    window.localStorage.setItem(themeKey, theme === "system" ? "" : theme);
+    applyThemeClass(theme);
+  }, [theme, storageReady]);
+
+  useEffect(() => {
     if (!storageReady) {
       return;
     }
 
     window.localStorage.setItem(leaderboardKey, leaderboard);
     setQuery("");
-    setHasUserSelection(false);
-    setSelectedIds(readStoredIds(selectionKeyFor(leaderboard), legacySelectionKeyFor(leaderboard)).slice(0, maxSelected));
+    if (!urlParamsApplied.current) {
+      setHasUserSelection(false);
+      setSelectedIds(readStoredIds(selectionKeyFor(leaderboard), legacySelectionKeyFor(leaderboard)).slice(0, maxSelected));
+    }
+    urlParamsApplied.current = false;
     setFavoriteIds(readStoredIdUnion([sharedFavoritesKey, ...legacyFavoriteKeys()]).slice(0, maxSelected));
     setActiveStorageKind(leaderboard);
     void loadArenaData(leaderboard, true);
@@ -390,6 +523,30 @@ export function ArenaDashboard() {
       window.localStorage.setItem(sharedFavoritesKey, JSON.stringify(favoriteIds));
     }
   }, [activeStorageKind, favoriteIds, leaderboard, storageReady]);
+
+  useEffect(() => {
+    if (!storageReady || selectedIds.length === 0) return;
+    const url = buildShareUrl(leaderboard, selectedIds);
+    window.history.replaceState(null, "", url);
+  }, [leaderboard, selectedIds, storageReady]);
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "/" && !e.ctrlKey && !e.metaKey && document.activeElement?.tagName !== "INPUT") {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+      if (e.key === "Escape") {
+        if (document.activeElement === searchRef.current) {
+          setQuery("");
+          searchRef.current?.blur();
+        }
+        setSidebarOpen(false);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const filteredModels = useMemo(() => {
     const term = normalize(query);
@@ -493,6 +650,7 @@ export function ArenaDashboard() {
 
   function saveCurrentAsFavorites() {
     setFavoriteIds(selectedIds.slice(0, maxSelected));
+    showToast(t.favoritesSaved);
   }
 
   function applyFavorites() {
@@ -504,11 +662,35 @@ export function ArenaDashboard() {
 
     setHasUserSelection(true);
     setSelectedIds(validFavorites);
+    showToast(t.favoritesApplied);
   }
 
   function resetSelection() {
     setHasUserSelection(true);
     setSelectedIds(buildDefaultSelection(models));
+  }
+
+  function handleShareLink() {
+    const url = buildShareUrl(leaderboard, selectedIds);
+    navigator.clipboard.writeText(url).then(() => showToast(t.linkCopied));
+  }
+
+  function handleExportCsv() {
+    exportCsv(selectedModels);
+    showToast(t.csvExported);
+  }
+
+  function handleCopyMarkdown() {
+    const md = buildMarkdownTable(selectedModels);
+    navigator.clipboard.writeText(md).then(() => showToast(t.markdownCopied));
+  }
+
+  function cycleTheme() {
+    setTheme((current) => {
+      if (current === "light") return "dark";
+      if (current === "dark") return "system";
+      return "light";
+    });
   }
 
   const scoreChartHeight = Math.max(280, scoreChartData.length * 46 + 48);
@@ -545,8 +727,11 @@ export function ArenaDashboard() {
     }
   ];
 
+  const ThemeIcon = theme === "dark" ? Moon : theme === "light" ? Sun : Sun;
+
   return (
-    <main className="min-h-screen bg-[#f6f7f1] text-ink">
+    <main className="min-h-screen bg-surface text-ink">
+      <ToastContainer />
       <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-5 px-4 py-4 sm:px-6 lg:px-8">
         <header className="grid gap-4 border-b border-ink/10 pb-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
           <div>
@@ -559,12 +744,12 @@ export function ArenaDashboard() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <div className="inline-flex items-center gap-1 rounded-md border border-ink/10 bg-white p-1 text-ink/70">
+            <div className="inline-flex items-center gap-1 rounded-md border border-ink/10 bg-panel p-1 text-ink/70">
               <BarChart3 className="ml-1 size-4 text-ink/45" />
               <span className="sr-only">{t.leaderboard}</span>
               <button
                 className={`rounded px-2 py-1 text-xs font-medium transition ${
-                  leaderboard === "text" ? "bg-ink text-white" : "hover:bg-mist"
+                  leaderboard === "text" ? "bg-sea text-white" : "hover:bg-mist"
                 }`}
                 onClick={() => setLeaderboard("text")}
                 type="button"
@@ -573,7 +758,7 @@ export function ArenaDashboard() {
               </button>
               <button
                 className={`rounded px-2 py-1 text-xs font-medium transition ${
-                  leaderboard === "code" ? "bg-ink text-white" : "hover:bg-mist"
+                  leaderboard === "code" ? "bg-sea text-white" : "hover:bg-mist"
                 }`}
                 onClick={() => setLeaderboard("code")}
                 type="button"
@@ -581,11 +766,11 @@ export function ArenaDashboard() {
                 {t.codeLeaderboard}
               </button>
             </div>
-            <div className="inline-flex items-center gap-1 rounded-md border border-ink/10 bg-white p-1 text-ink/70">
+            <div className="inline-flex items-center gap-1 rounded-md border border-ink/10 bg-panel p-1 text-ink/70">
               <Languages className="ml-1 size-4 text-ink/45" />
               <button
                 className={`rounded px-2 py-1 text-xs font-medium transition ${
-                  language === "zh" ? "bg-ink text-white" : "hover:bg-mist"
+                  language === "zh" ? "bg-sea text-white" : "hover:bg-mist"
                 }`}
                 onClick={() => setLanguage("zh")}
                 type="button"
@@ -594,7 +779,7 @@ export function ArenaDashboard() {
               </button>
               <button
                 className={`rounded px-2 py-1 text-xs font-medium transition ${
-                  language === "en" ? "bg-ink text-white" : "hover:bg-mist"
+                  language === "en" ? "bg-sea text-white" : "hover:bg-mist"
                 }`}
                 onClick={() => setLanguage("en")}
                 type="button"
@@ -602,12 +787,20 @@ export function ArenaDashboard() {
                 {t.english}
               </button>
             </div>
-            <span className="rounded-md border border-ink/10 bg-white px-3 py-2 text-ink/70">
+            <button
+              className="inline-flex size-9 items-center justify-center rounded-md border border-ink/10 bg-panel text-ink/60 transition hover:border-sea/40 hover:text-sea"
+              onClick={cycleTheme}
+              title={t.theme}
+              type="button"
+            >
+              <ThemeIcon className="size-4" />
+            </button>
+            <span className="rounded-md border border-ink/10 bg-panel px-3 py-2 text-ink/70">
               {t.selected} {selectedModels.length} / {maxSelected}
             </span>
-            <span className="rounded-md border border-ink/10 bg-white px-3 py-2 text-ink/70">{syncedLabel}</span>
+            <span className="hidden rounded-md border border-ink/10 bg-panel px-3 py-2 text-ink/70 sm:inline-block">{syncedLabel}</span>
             <a
-              className="inline-flex items-center gap-2 rounded-md border border-ink/10 bg-white px-3 py-2 text-ink/70 transition hover:border-sea/40 hover:text-sea"
+              className="inline-flex items-center gap-2 rounded-md border border-ink/10 bg-panel px-3 py-2 text-ink/70 transition hover:border-sea/40 hover:text-sea"
               href={sourceUrl}
               target="_blank"
               rel="noreferrer"
@@ -616,13 +809,21 @@ export function ArenaDashboard() {
               <ExternalLink className="size-4" />
             </a>
             <button
-              className="inline-flex items-center gap-2 rounded-md bg-ink px-3 py-2 font-medium text-white transition hover:bg-sea disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-md bg-sea px-3 py-2 font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               disabled={apiState.status === "loading"}
               onClick={() => loadArenaData()}
               type="button"
             >
               <RefreshCw className={`size-4 ${apiState.status === "loading" ? "animate-spin" : ""}`} />
               {t.refresh}
+            </button>
+            <button
+              className="inline-flex items-center gap-2 rounded-md border border-ink/10 bg-panel px-3 py-2 text-ink/70 transition hover:border-sea/40 hover:text-sea lg:hidden"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              type="button"
+            >
+              {sidebarOpen ? <PanelLeftClose className="size-4" /> : <PanelLeftOpen className="size-4" />}
+              {t.modelPanel}
             </button>
           </div>
         </header>
@@ -648,7 +849,7 @@ export function ArenaDashboard() {
                   {t.retry}
                 </button>
                 <a
-                  className="rounded-md border border-coral/30 bg-white px-3 py-2 text-xs font-semibold text-coral transition hover:bg-coral/5"
+                  className="rounded-md border border-coral/30 bg-panel px-3 py-2 text-xs font-semibold text-coral transition hover:bg-coral/5"
                   href={sourceUrl}
                   target="_blank"
                   rel="noreferrer"
@@ -661,14 +862,22 @@ export function ArenaDashboard() {
         ) : null}
 
         <div className="grid min-h-[720px] grid-cols-1 gap-5 lg:grid-cols-[390px_minmax(0,1fr)]">
-          <aside className="flex min-h-0 flex-col overflow-hidden rounded-md border border-ink/10 bg-white shadow-soft">
+          {sidebarOpen && (
+            <div className="fixed inset-0 z-30 bg-ink/30 lg:hidden" onClick={() => setSidebarOpen(false)} />
+          )}
+          <aside className={`flex min-h-0 flex-col overflow-hidden rounded-md border border-ink/10 bg-panel shadow-soft transition-all ${
+            sidebarOpen
+              ? "fixed inset-y-0 left-0 z-40 w-[340px] rounded-none border-0 sm:w-[390px]"
+              : "hidden lg:flex"
+          }`}>
             <div className="border-b border-ink/10 p-4">
               <label className="relative block">
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink/40" />
                 <input
-                  className="h-11 w-full rounded-md border border-ink/15 bg-mist/45 pl-10 pr-3 text-sm outline-none transition focus:border-sea focus:bg-white"
+                  ref={searchRef}
+                  className="h-11 w-full rounded-md border border-ink/15 bg-mist/45 pl-10 pr-3 text-sm outline-none transition focus:border-sea focus:bg-panel"
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder={t.searchPlaceholder}
+                  placeholder={`${t.searchPlaceholder}  (/)`}
                   value={query}
                 />
               </label>
@@ -680,7 +889,7 @@ export function ArenaDashboard() {
               </div>
             </div>
 
-            <div className="border-b border-ink/10 bg-[#fbfbf7] p-4">
+            <div className="border-b border-ink/10 bg-mist/30 p-4">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 text-sm font-semibold">
                   <Star className="size-4 fill-saffron text-saffron" />
@@ -688,7 +897,7 @@ export function ArenaDashboard() {
                 </div>
                 <div className="flex gap-1">
                   <button
-                    className="inline-flex size-8 items-center justify-center rounded-md border border-ink/10 bg-white text-ink/60 transition hover:border-sea/40 hover:text-sea disabled:opacity-35"
+                    className="inline-flex size-8 items-center justify-center rounded-md border border-ink/10 bg-panel text-ink/60 transition hover:border-sea/40 hover:text-sea disabled:opacity-35"
                     disabled={selectedModels.length === 0}
                     onClick={saveCurrentAsFavorites}
                     title={t.saveCurrent}
@@ -697,7 +906,7 @@ export function ArenaDashboard() {
                     <Save className="size-4" />
                   </button>
                   <button
-                    className="inline-flex size-8 items-center justify-center rounded-md border border-ink/10 bg-white text-ink/60 transition hover:border-sea/40 hover:text-sea disabled:opacity-35"
+                    className="inline-flex size-8 items-center justify-center rounded-md border border-ink/10 bg-panel text-ink/60 transition hover:border-sea/40 hover:text-sea disabled:opacity-35"
                     disabled={favoriteIds.length === 0}
                     onClick={applyFavorites}
                     title={t.applyFavorites}
@@ -706,9 +915,12 @@ export function ArenaDashboard() {
                     <Check className="size-4" />
                   </button>
                   <button
-                    className="inline-flex size-8 items-center justify-center rounded-md border border-ink/10 bg-white text-ink/60 transition hover:border-coral/40 hover:text-coral disabled:opacity-35"
+                    className="inline-flex size-8 items-center justify-center rounded-md border border-ink/10 bg-panel text-ink/60 transition hover:border-coral/40 hover:text-coral disabled:opacity-35"
                     disabled={favoriteIds.length === 0}
-                    onClick={() => setFavoriteIds([])}
+                    onClick={() => {
+                      setFavoriteIds([]);
+                      showToast(t.favoritesCleared);
+                    }}
                     title={t.clearFavorites}
                     type="button"
                   >
@@ -757,7 +969,7 @@ export function ArenaDashboard() {
                   <div className="text-sm font-semibold">{t.noResultsTitle}</div>
                   <p className="mt-2 text-sm text-ink/55">{t.noResultsHint}</p>
                   <button
-                    className="mt-4 rounded-md border border-ink/10 bg-white px-3 py-2 text-xs font-semibold text-ink/70 transition hover:border-sea/40 hover:text-sea"
+                    className="mt-4 rounded-md border border-ink/10 bg-panel px-3 py-2 text-xs font-semibold text-ink/70 transition hover:border-sea/40 hover:text-sea"
                     onClick={() => setQuery("")}
                     type="button"
                   >
@@ -775,13 +987,13 @@ export function ArenaDashboard() {
                   return (
                     <div
                       className={`mb-1 grid w-full grid-cols-[34px_minmax(0,1fr)_auto_34px] items-center gap-2 rounded-md px-2 py-2 transition ${
-                        checked ? "bg-sea/10 ring-1 ring-sea/20" : "hover:bg-mist"
+                        checked ? "bg-sea/10 ring-1 ring-sea/20" : "hover:bg-mist/50"
                       }`}
                       key={model.id}
                     >
                       <button
                         className={`flex size-5 items-center justify-center rounded border ${
-                          checked ? "border-sea bg-sea text-white" : "border-ink/20 bg-white text-transparent"
+                          checked ? "border-sea bg-sea text-white" : "border-ink/20 bg-panel text-transparent"
                         } disabled:opacity-35`}
                         disabled={disabled}
                         onClick={() => toggleModel(model)}
@@ -819,7 +1031,7 @@ export function ArenaDashboard() {
           </aside>
 
           <section className="min-w-0 space-y-5">
-            <div className="rounded-md border border-ink/10 bg-white p-4 shadow-soft">
+            <div className="rounded-md border border-ink/10 bg-panel p-4 shadow-soft">
               <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                 <div>
                   <div className="flex items-center gap-2 text-sm font-medium text-sea">
@@ -830,13 +1042,22 @@ export function ArenaDashboard() {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button
-                    className="inline-flex items-center gap-2 rounded-md border border-ink/10 bg-white px-2.5 py-1.5 text-xs font-medium text-ink/65 transition hover:border-sea/40 hover:text-sea disabled:opacity-35"
+                    className="inline-flex items-center gap-2 rounded-md border border-ink/10 bg-panel px-2.5 py-1.5 text-xs font-medium text-ink/65 transition hover:border-sea/40 hover:text-sea disabled:opacity-35"
                     disabled={models.length === 0}
                     onClick={resetSelection}
                     type="button"
                   >
                     <RotateCcw className="size-3.5" />
                     {t.defaultSet}
+                  </button>
+                  <button
+                    className="inline-flex items-center gap-2 rounded-md border border-ink/10 bg-panel px-2.5 py-1.5 text-xs font-medium text-ink/65 transition hover:border-sea/40 hover:text-sea disabled:opacity-35"
+                    disabled={selectedModels.length === 0}
+                    onClick={handleShareLink}
+                    type="button"
+                  >
+                    <Link2 className="size-3.5" />
+                    {t.shareLink}
                   </button>
                   {selectedModels.map((model) => (
                     <button
@@ -858,7 +1079,7 @@ export function ArenaDashboard() {
                 const Icon = card.icon;
 
                 return (
-                  <div className="rounded-md border border-ink/10 bg-white p-4 shadow-soft" key={card.label}>
+                  <div className="rounded-md border border-ink/10 bg-panel p-4 shadow-soft transition-shadow hover:shadow-lg" key={card.label}>
                     <div className="flex items-center justify-between gap-3">
                       <div className="text-xs font-medium uppercase tracking-wide text-ink/45">{card.label}</div>
                       <Icon className="size-4 text-sea" />
@@ -876,7 +1097,7 @@ export function ArenaDashboard() {
               </div>
             ) : null}
 
-            <div className="rounded-md border border-ink/10 bg-white p-4 shadow-soft">
+            <div className="rounded-md border border-ink/10 bg-panel p-4 shadow-soft animate-fade-in">
               <h2 className="text-base font-semibold">{scoreChartTitle}</h2>
               <div className="mt-4" style={{ height: scoreChartHeight }}>
                 <ResponsiveContainer width="100%" height="100%">
@@ -885,38 +1106,58 @@ export function ArenaDashboard() {
                     layout="vertical"
                     margin={{ left: 12, right: 28, top: 8, bottom: 8 }}
                   >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#dbe3e6" horizontal={false} />
-                    <XAxis domain={["dataMin - 15", "dataMax + 8"]} tick={{ fontSize: 12 }} type="number" />
-                    <YAxis dataKey="shortName" tick={{ fontSize: 12 }} type="category" width={210} />
-                    <Tooltip />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" horizontal={false} />
+                    <XAxis domain={["dataMin - 15", "dataMax + 8"]} tick={{ fontSize: 12, fill: "var(--color-ink)" }} type="number" />
+                    <YAxis dataKey="shortName" tick={{ fontSize: 12, fill: "var(--color-ink)" }} type="category" width={210} />
+                    <Tooltip contentStyle={{ backgroundColor: "var(--color-panel)", border: "1px solid var(--chart-grid)", color: "var(--color-ink)" }} />
                     <Legend />
-                    <Bar dataKey="score" fill="#2d7f87" name={scoreLegend} radius={[0, 5, 5, 0]} />
+                    <Bar dataKey="score" fill="var(--chart-score)" name={scoreLegend} radius={[0, 5, 5, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
 
-            <div className="rounded-md border border-ink/10 bg-white p-4 shadow-soft">
+            <div className="rounded-md border border-ink/10 bg-panel p-4 shadow-soft animate-fade-in">
               <h2 className="text-base font-semibold">{t.rankVotes}</h2>
               <div className="mt-4 h-[320px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={compactChartData} margin={{ left: 0, right: 12, top: 8, bottom: 28 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#dbe3e6" />
-                    <XAxis dataKey="name" angle={-20} interval={0} textAnchor="end" tick={{ fontSize: 11 }} />
-                    <YAxis yAxisId="left" reversed tick={{ fontSize: 12 }} />
-                    <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} />
-                    <Tooltip />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
+                    <XAxis dataKey="name" angle={-20} interval={0} textAnchor="end" tick={{ fontSize: 11, fill: "var(--color-ink)" }} />
+                    <YAxis yAxisId="left" reversed tick={{ fontSize: 12, fill: "var(--color-ink)" }} />
+                    <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12, fill: "var(--color-ink)" }} />
+                    <Tooltip contentStyle={{ backgroundColor: "var(--color-panel)", border: "1px solid var(--chart-grid)", color: "var(--color-ink)" }} />
                     <Legend />
-                    <Bar yAxisId="left" dataKey="rank" fill="#d89a2b" name={t.rankLegend} radius={[4, 4, 0, 0]} />
-                    <Bar yAxisId="right" dataKey="votes" fill="#c85850" name={t.votesLegend} radius={[4, 4, 0, 0]} />
+                    <Bar yAxisId="left" dataKey="rank" fill="var(--chart-rank)" name={t.rankLegend} radius={[4, 4, 0, 0]} />
+                    <Bar yAxisId="right" dataKey="votes" fill="var(--chart-votes)" name={t.votesLegend} radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
 
-            <div className="overflow-hidden rounded-md border border-ink/10 bg-white shadow-soft">
-              <div className="border-b border-ink/10 px-4 py-3">
+            <div className="overflow-hidden rounded-md border border-ink/10 bg-panel shadow-soft">
+              <div className="flex items-center justify-between border-b border-ink/10 px-4 py-3">
                 <h2 className="text-base font-semibold">{t.priceTable}</h2>
+                <div className="flex gap-1">
+                  <button
+                    className="inline-flex items-center gap-1.5 rounded-md border border-ink/10 bg-panel px-2.5 py-1.5 text-xs font-medium text-ink/60 transition hover:border-sea/40 hover:text-sea disabled:opacity-35"
+                    disabled={selectedModels.length === 0}
+                    onClick={handleExportCsv}
+                    type="button"
+                  >
+                    <Download className="size-3.5" />
+                    {t.exportCsv}
+                  </button>
+                  <button
+                    className="inline-flex items-center gap-1.5 rounded-md border border-ink/10 bg-panel px-2.5 py-1.5 text-xs font-medium text-ink/60 transition hover:border-sea/40 hover:text-sea disabled:opacity-35"
+                    disabled={selectedModels.length === 0}
+                    onClick={handleCopyMarkdown}
+                    type="button"
+                  >
+                    <Link2 className="size-3.5" />
+                    {t.copyMarkdown}
+                  </button>
+                </div>
               </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full text-left text-sm">
@@ -933,7 +1174,7 @@ export function ArenaDashboard() {
                   </thead>
                   <tbody>
                     {selectedModels.map((model) => (
-                      <tr className="border-b border-ink/5 last:border-0" key={model.id}>
+                      <tr className="border-b border-ink/5 last:border-0 transition-colors hover:bg-mist/30" key={model.id}>
                         <td className="px-4 py-3">
                           <div className="max-w-[320px] truncate font-medium">{model.name}</div>
                           <div className="text-xs text-ink/50">
