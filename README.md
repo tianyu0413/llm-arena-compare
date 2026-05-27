@@ -2,7 +2,9 @@
 
 [中文文档](docs/README.zh-CN.md)
 
-[Live Demo](https://llm-arena-compare.vercel.app)
+## Live Demo
+
+[https://llm-arena-compare.vercel.app](https://llm-arena-compare.vercel.app)
 
 LLM Arena Compare is a local-first dashboard for comparing selected models from the public Arena Text and Code leaderboards. It helps you search models, save favorite model sets in the browser, refresh live leaderboard scores, and compare rank, score, votes, price, and context window in a focused visual interface.
 
