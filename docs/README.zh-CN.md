@@ -9,7 +9,7 @@
 
   <h3><a href="https://llm-arena-compare.vercel.app">👉 立即在线体验 — 无需安装，打开即用</a></h3>
 
-  [English README](../README.md)
+  [English](../README.md)
 </div>
 
 ---
