@@ -1,0 +1,47 @@
+{
+  "name": "llm-arena-compare",
+  "version": "0.1.0",
+  "description": "Compare selected Arena Text and Code leaderboard models with live scores, favorites, and visual charts.",
+  "license": "MIT",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tianyu0413/llm-arena-compare.git"
+  },
+  "bugs": {
+    "url": "https://github.com/tianyu0413/llm-arena-compare/issues"
+  },
+  "homepage": "https://github.com/tianyu0413/llm-arena-compare#readme",
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "check": "npm run lint && npm run build"
+  },
+  "overrides": {
+    "postcss": "^8.5.15"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "lucide-react": "^0.468.0",
+    "next": "16.2.6",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "recharts": "^2.15.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.17.0",
+    "eslint-config-next": "16.2.6",
+    "postcss": "^8.5.15",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.2"
+  }
+}
